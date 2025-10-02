@@ -34,6 +34,25 @@ class SamsaraCustomerScraper:
             st.error(f"Error during scraping: {str(e)}")
             return []
     
+    def _normalize_url(self, url: str) -> str:
+        """Normalize URL for comparison (remove trailing slashes, convert to lowercase)"""
+        url = url.strip().rstrip('/')
+        return url
+    
+    def _deduplicate_links(self, links: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        """Remove duplicate links based on normalized URLs"""
+        seen_urls = set()
+        unique_links = []
+        
+        for link in links:
+            normalized_url = self._normalize_url(link['url'])
+            if normalized_url not in seen_urls:
+                seen_urls.add(normalized_url)
+                link['url'] = normalized_url  # Use normalized URL
+                unique_links.append(link)
+        
+        return unique_links
+    
     def _scrape_stories(self) -> List[Dict[str, Any]]:
         """Scrape customer stories using requests or Playwright"""
         stories = []
@@ -61,7 +80,10 @@ class SamsaraCustomerScraper:
                     soup = BeautifulSoup(response.content, 'html.parser')
                     customer_links = self._extract_customer_links(soup)
             
-            st.info(f"Found {len(customer_links)} customer story links")
+            # Deduplicate links
+            customer_links = self._deduplicate_links(customer_links)
+            
+            st.info(f"Found {len(customer_links)} unique customer story links")
             
             if not customer_links:
                 st.warning("No customer stories found. The website structure may have changed.")
@@ -117,7 +139,20 @@ class SamsaraCustomerScraper:
         except Exception as e:
             st.error(f"Scraping error: {str(e)}")
         
-        return stories
+        # Final deduplication based on URLs
+        seen_urls = set()
+        unique_stories = []
+        for story in stories:
+            normalized_url = self._normalize_url(story.get('url', ''))
+            if normalized_url and normalized_url not in seen_urls:
+                seen_urls.add(normalized_url)
+                unique_stories.append(story)
+            else:
+                st.warning(f"Removing duplicate: {story.get('company_name', 'Unknown')} ({normalized_url})")
+        
+        st.info(f"Final count after deduplication: {len(unique_stories)} unique stories")
+        
+        return unique_stories
     
     def _get_customer_links_playwright(self) -> List[Dict[str, str]]:
         """Use Playwright to load all customer stories dynamically"""
