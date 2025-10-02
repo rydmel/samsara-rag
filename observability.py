@@ -22,11 +22,18 @@ class ObservabilityTracker:
         # Initialize Logfire if available
         if LOGFIRE_AVAILABLE:
             try:
-                logfire.configure()
-                self.logfire_enabled = True
-                print("✓ Pydantic Logfire initialized successfully")
+                # Configure Logfire with token from environment
+                logfire_token = os.getenv('LOGFIRE_TOKEN')
+                if logfire_token:
+                    logfire.configure(token=logfire_token)
+                    self.logfire_enabled = True
+                    print("✓ Pydantic Logfire initialized successfully with your account")
+                else:
+                    logfire.configure()
+                    self.logfire_enabled = True
+                    print("✓ Pydantic Logfire initialized (no token found)")
             except Exception as e:
-                print(f"⚠ Logfire not configured: {str(e)}")
+                print(f"⚠ Logfire configuration failed: {str(e)}")
                 self.logfire_enabled = False
         else:
             print("⚠ Pydantic Logfire not available - using local logging")
