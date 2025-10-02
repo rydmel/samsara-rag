@@ -38,8 +38,12 @@ class SamsaraCustomerScraper:
             if response.status_code == 200:
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # Extract customer story links and basic info
-                customer_links = self._extract_customer_links(soup)
+                # Try to extract data from embedded JSON first (many modern sites do this)
+                customer_links = self._extract_from_json(soup)
+                
+                # If no JSON data found, fall back to HTML parsing
+                if not customer_links:
+                    customer_links = self._extract_customer_links(soup)
                 
                 st.info(f"Found {len(customer_links)} customer story links")
                 
@@ -48,7 +52,7 @@ class SamsaraCustomerScraper:
                     st.text(f"Processing customer story {i}/{len(customer_links)}")
                     
                     try:
-                        time.sleep(0.5)  # Be polite to the server
+                        time.sleep(0.3)  # Be polite to the server
                         story_response = self.session.get(link_info['url'], timeout=30)
                         
                         if story_response.status_code == 200:
@@ -70,6 +74,66 @@ class SamsaraCustomerScraper:
             st.error(f"Scraping error: {str(e)}")
         
         return stories
+    
+    def _extract_from_json(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
+        """Try to extract customer story data from embedded JSON in script tags"""
+        links = []
+        
+        try:
+            # Look for script tags that might contain JSON data
+            script_tags = soup.find_all('script', type='application/json')
+            
+            for script in script_tags:
+                try:
+                    data = json.loads(script.string)
+                    # Recursively search for customer URLs in the JSON
+                    customer_urls = self._find_customer_urls_in_json(data)
+                    for url in customer_urls:
+                        if url not in [link['url'] for link in links]:
+                            # Extract title from URL
+                            title = url.split('/')[-1].replace('-', ' ').title()
+                            links.append({'url': url, 'title': title})
+                except:
+                    continue
+            
+            # Also check for Next.js data
+            nextjs_script = soup.find('script', id='__NEXT_DATA__')
+            if nextjs_script:
+                try:
+                    data = json.loads(nextjs_script.string)
+                    customer_urls = self._find_customer_urls_in_json(data)
+                    for url in customer_urls:
+                        if url not in [link['url'] for link in links]:
+                            title = url.split('/')[-1].replace('-', ' ').title()
+                            links.append({'url': url, 'title': title})
+                except:
+                    pass
+                    
+        except Exception as e:
+            pass
+        
+        return links
+    
+    def _find_customer_urls_in_json(self, data, found_urls=None) -> List[str]:
+        """Recursively search JSON data for customer story URLs"""
+        if found_urls is None:
+            found_urls = []
+        
+        if isinstance(data, dict):
+            for key, value in data.items():
+                # Look for URL-like keys or href attributes
+                if key in ['url', 'href', 'link', 'path', 'slug'] and isinstance(value, str):
+                    if '/customers/' in value and value != '/customers':
+                        full_url = value if value.startswith('http') else f"https://www.samsara.com{value}"
+                        if full_url not in found_urls:
+                            found_urls.append(full_url)
+                else:
+                    self._find_customer_urls_in_json(value, found_urls)
+        elif isinstance(data, list):
+            for item in data:
+                self._find_customer_urls_in_json(item, found_urls)
+        
+        return found_urls
     
     def _extract_customer_links(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
         """Extract customer story links from the main page"""
