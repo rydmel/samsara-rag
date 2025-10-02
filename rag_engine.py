@@ -219,13 +219,19 @@ class RAGEngine:
             }
             
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             st.error(f"Error generating response: {str(e)}")
+            st.error(f"Full error: {error_details}")
+            
+            # Return error with sources so user knows retrieval worked
+            sources = [doc.metadata.get('source', 'Unknown') for doc in documents]
             return {
-                "answer": f"I apologize, but I encountered an error while processing your question: {str(e)}",
-                "sources": [],
+                "answer": f"❌ I apologize, but I encountered an error while generating a response: {str(e)}\n\nThe sources were retrieved successfully, but the OpenAI API call failed. Please check your API key and try again.",
+                "sources": sources,
                 "tokens_used": 0,
                 "response_time": 0,
-                "context_length": 0
+                "context_length": len(context) if 'context' in locals() else 0
             }
     
     def _prepare_context(self, documents: List[Document]) -> str:

@@ -111,6 +111,12 @@ def chat_interface():
         # Show message count
         st.caption(f"💬 {len(st.session_state.messages)} messages in conversation")
     
+    # Check if vector store has data
+    stats = st.session_state.vector_store.get_stats()
+    if stats.get('total_chunks', 0) == 0:
+        st.warning("⚠️ The knowledge base is empty. Please go to the Configuration tab and click 'Refresh Database' to load customer stories.")
+        return
+    
     # Main chat container
     chat_container = st.container()
     
