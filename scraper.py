@@ -7,6 +7,13 @@ from bs4 import BeautifulSoup
 import streamlit as st
 import time
 
+# Try to import playwright
+try:
+    from playwright.sync_api import sync_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+
 class SamsaraCustomerScraper:
     """Scraper for Samsara customer stories"""
     
@@ -17,6 +24,7 @@ class SamsaraCustomerScraper:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
+        self.use_playwright = PLAYWRIGHT_AVAILABLE
     
     def scrape_customer_stories(self) -> List[Dict[str, Any]]:
         """Scrape customer stories from Samsara website"""
@@ -27,17 +35,28 @@ class SamsaraCustomerScraper:
             return []
     
     def _scrape_stories(self) -> List[Dict[str, Any]]:
-        """Scrape customer stories using requests"""
+        """Scrape customer stories using requests or Playwright"""
         stories = []
         
         try:
             # Try multiple methods to get all customer story URLs
             st.info("Finding all customer story URLs...")
             
-            # Method 1: Try sitemap.xml (most reliable for getting all pages)
-            customer_links = self._extract_from_sitemap()
+            # Method 1: Try Playwright to load all dynamic content
+            customer_links = []
+            if self.use_playwright:
+                try:
+                    st.info("Using browser automation to load all stories...")
+                    customer_links = self._get_customer_links_playwright()
+                except Exception as e:
+                    st.warning(f"Browser automation failed: {str(e)}")
+                    customer_links = []
             
-            # Method 2: Try embedded JSON if sitemap didn't work
+            # Method 2: Try sitemap.xml (most reliable for getting all pages)
+            if not customer_links:
+                customer_links = self._extract_from_sitemap()
+            
+            # Method 3: Try embedded JSON if sitemap didn't work
             if not customer_links:
                 st.info("Sitemap not found, trying JSON extraction...")
                 response = self.session.get(self.base_url, timeout=30)
@@ -45,7 +64,7 @@ class SamsaraCustomerScraper:
                     soup = BeautifulSoup(response.content, 'html.parser')
                     customer_links = self._extract_from_json(soup)
             
-            # Method 3: Fall back to HTML parsing
+            # Method 4: Fall back to HTML parsing
             if not customer_links:
                 st.info("JSON extraction failed, trying HTML parsing...")
                 response = self.session.get(self.base_url, timeout=30)
@@ -83,6 +102,83 @@ class SamsaraCustomerScraper:
             st.error(f"Scraping error: {str(e)}")
         
         return stories
+    
+    def _get_customer_links_playwright(self) -> List[Dict[str, str]]:
+        """Use Playwright to load all customer stories dynamically"""
+        links = []
+        
+        try:
+            with sync_playwright() as p:
+                # Launch browser
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                
+                # Navigate to the customers page
+                page.goto(self.base_url, wait_until='networkidle', timeout=30000)
+                
+                # Click "More stories +" button repeatedly until all stories are loaded
+                max_clicks = 20  # Safety limit
+                clicks = 0
+                
+                while clicks < max_clicks:
+                    try:
+                        # Look for the "More stories" button
+                        more_button = page.locator('text=/More stories/i, button:has-text("More")')
+                        
+                        if more_button.count() > 0 and more_button.is_visible():
+                            st.text(f"Loading more stories... (click {clicks + 1})")
+                            more_button.first.click()
+                            page.wait_for_timeout(2000)  # Wait for content to load
+                            clicks += 1
+                        else:
+                            break
+                    except:
+                        # Button not found or not clickable, all stories loaded
+                        break
+                
+                # Extract all customer story links
+                page.wait_for_timeout(1000)  # Final wait for any remaining content
+                
+                # Find all links to customer stories
+                story_links = page.locator('a[href*="/customers/"]').all()
+                
+                seen_urls = set()
+                for link in story_links:
+                    try:
+                        href = link.get_attribute('href')
+                        if href and '/customers/' in href and href not in seen_urls:
+                            # Make absolute URL
+                            if href.startswith('/'):
+                                url = f"https://www.samsara.com{href}"
+                            elif not href.startswith('http'):
+                                url = f"https://www.samsara.com/customers/{href}"
+                            else:
+                                url = href
+                            
+                            # Skip the main customers page
+                            if url == self.base_url or url == self.base_url + '/':
+                                continue
+                            
+                            # Try to get title
+                            title = link.text_content().strip() or link.get_attribute('title') or url.split('/')[-1]
+                            
+                            links.append({
+                                'url': url,
+                                'title': title
+                            })
+                            seen_urls.add(href)
+                    except:
+                        continue
+                
+                browser.close()
+                
+                st.success(f"Browser automation found {len(links)} customer stories!")
+                
+        except Exception as e:
+            st.warning(f"Playwright scraping failed: {str(e)}")
+            raise
+        
+        return links
     
     def _extract_from_sitemap(self) -> List[Dict[str, str]]:
         """Extract customer story URLs from sitemap.xml"""
