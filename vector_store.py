@@ -16,8 +16,39 @@ class VectorStore:
     def __init__(self, persist_directory: str = "./chromadb"):
         self.persist_directory = persist_directory
         
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        # Initialize ChromaDB client with proper settings
+        try:
+            # Clear any existing lock files
+            import shutil
+            lock_file = os.path.join(persist_directory, "chroma.sqlite3-wal")
+            if os.path.exists(lock_file):
+                try:
+                    os.remove(lock_file)
+                except:
+                    pass
+            
+            # Initialize ChromaDB client with settings
+            self.client = chromadb.PersistentClient(
+                path=persist_directory,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
+            )
+        except Exception as e:
+            st.error(f"Error initializing ChromaDB client: {str(e)}")
+            # Create a fresh client if there's an issue
+            if os.path.exists(persist_directory):
+                import shutil
+                shutil.rmtree(persist_directory)
+            os.makedirs(persist_directory, exist_ok=True)
+            self.client = chromadb.PersistentClient(
+                path=persist_directory,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True
+                )
+            )
         
         # Create or get collection
         self.collection_name = "samsara_customer_stories"

@@ -24,12 +24,12 @@ class ObservabilityTracker:
             try:
                 logfire.configure()
                 self.logfire_enabled = True
-                st.success("Pydantic Logfire initialized successfully!")
+                print("✓ Pydantic Logfire initialized successfully")
             except Exception as e:
-                st.warning(f"Failed to initialize Logfire: {str(e)}")
+                print(f"⚠ Logfire not configured: {str(e)}")
                 self.logfire_enabled = False
         else:
-            st.warning("Pydantic Logfire not available. Using local logging only.")
+            print("⚠ Pydantic Logfire not available - using local logging")
             self.logfire_enabled = False
     
     def start_trace(self, query: str, config: Dict[str, Any]) -> str:
@@ -56,7 +56,7 @@ class ObservabilityTracker:
                     span.set_attribute('rag_strategy', config.get('strategy', 'unknown'))
                     span.set_attribute('top_k', config.get('top_k', 0))
             except Exception as e:
-                st.warning(f"Logfire logging error: {str(e)}")
+                print(f"⚠ Logfire logging error: {str(e)}")
         
         return trace_id
     
