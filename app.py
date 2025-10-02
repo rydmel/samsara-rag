@@ -162,7 +162,7 @@ def chat_interface():
             'chunk_overlap': 200,
             'top_k': 5,
             'retrieval_method': 'semantic',
-            'temperature': 0.7,
+            'temperature': 1.0,
             'max_tokens': 2048
         })
         
@@ -298,7 +298,7 @@ def configuration_interface():
             "Temperature",
             min_value=0.0,
             max_value=2.0,
-            value=0.7,
+            value=1.0,
             step=0.1,
             help="Controls randomness in responses (0=focused, 2=creative)"
         )
