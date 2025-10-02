@@ -15,7 +15,7 @@ from evaluation import EvaluationMetrics
 
 # Page configuration
 st.set_page_config(
-    page_title="Samsara RAG Chatbot",
+    page_title="Samsara Customer Assistant",
     page_icon="🚚",
     layout="wide"
 )
@@ -69,7 +69,7 @@ def initialize_app():
     return True
 
 def main():
-    st.title("🚚 Samsara RAG Chatbot")
+    st.title("🚚 Samsara Customer Assistant")
     st.markdown("Ask questions about Samsara's customer success stories and experiences.")
     
     # Initialize the application
