@@ -42,21 +42,10 @@ class SamsaraCustomerScraper:
             # Try multiple methods to get all customer story URLs
             st.info("Finding all customer story URLs...")
             
-            # Method 1: Try Playwright to load all dynamic content
-            customer_links = []
-            if self.use_playwright:
-                try:
-                    st.info("Using browser automation to load all stories...")
-                    customer_links = self._get_customer_links_playwright()
-                except Exception as e:
-                    st.warning(f"Browser automation failed: {str(e)}")
-                    customer_links = []
+            # Method 1: Try sitemap.xml (most reliable for getting all pages)
+            customer_links = self._extract_from_sitemap()
             
-            # Method 2: Try sitemap.xml (most reliable for getting all pages)
-            if not customer_links:
-                customer_links = self._extract_from_sitemap()
-            
-            # Method 3: Try embedded JSON if sitemap didn't work
+            # Method 2: Try embedded JSON if sitemap didn't work
             if not customer_links:
                 st.info("Sitemap not found, trying JSON extraction...")
                 response = self.session.get(self.base_url, timeout=30)
@@ -64,7 +53,7 @@ class SamsaraCustomerScraper:
                     soup = BeautifulSoup(response.content, 'html.parser')
                     customer_links = self._extract_from_json(soup)
             
-            # Method 4: Fall back to HTML parsing
+            # Method 3: Fall back to HTML parsing
             if not customer_links:
                 st.info("JSON extraction failed, trying HTML parsing...")
                 response = self.session.get(self.base_url, timeout=30)
@@ -80,23 +69,50 @@ class SamsaraCustomerScraper:
             
             # Process all customer stories
             for i, link_info in enumerate(customer_links, 1):
-                st.text(f"Processing customer story {i}/{len(customer_links)}")
+                st.text(f"Processing customer story {i}/{len(customer_links)}: {link_info.get('title', 'Unknown')}")
                 
-                try:
-                    time.sleep(0.3)  # Be polite to the server
-                    story_response = self.session.get(link_info['url'], timeout=30)
+                story_data = None
+                max_retries = 2
+                
+                for attempt in range(max_retries):
+                    try:
+                        time.sleep(0.3)  # Be polite to the server
+                        story_response = self.session.get(link_info['url'], timeout=30)
+                        
+                        if story_response.status_code == 200:
+                            story_data = self._extract_story_content(
+                                story_response.content, 
+                                link_info
+                            )
+                            if story_data:
+                                stories.append(story_data)
+                                st.success(f"✓ Successfully scraped: {link_info.get('title', 'Unknown')}")
+                                break
+                        else:
+                            st.warning(f"HTTP {story_response.status_code} for {link_info['url']}")
                     
-                    if story_response.status_code == 200:
-                        story_data = self._extract_story_content(
-                            story_response.content, 
-                            link_info
-                        )
-                        if story_data:
-                            stories.append(story_data)
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            st.warning(f"Retry {attempt + 1} for {link_info['url']}: {str(e)}")
+                            time.sleep(1)
+                        else:
+                            st.error(f"✗ Failed to scrape {link_info['url']}: {str(e)}")
                 
-                except Exception as e:
-                    st.warning(f"Failed to scrape {link_info['url']}: {str(e)}")
-                    continue
+                # If all retries failed, add minimal story data
+                if not story_data:
+                    st.warning(f"Adding minimal data for {link_info['title']}")
+                    stories.append({
+                        'url': link_info['url'],
+                        'title': link_info.get('title', 'Unknown'),
+                        'company_name': link_info.get('title', 'Unknown'),
+                        'industry': 'Unknown',
+                        'content': f"Story: {link_info.get('title', 'Unknown')} - Content could not be extracted. Visit {link_info['url']} for more information.",
+                        'highlights': [],
+                        'roi_metrics': [],
+                        'challenges': [],
+                        'solutions': [],
+                        'competitor_info': ''
+                    })
             
         except Exception as e:
             st.error(f"Scraping error: {str(e)}")
