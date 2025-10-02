@@ -165,36 +165,8 @@ def chat_interface():
                                         for j, source in enumerate(metadata["sources"], 1):
                                             st.caption(f"**{j}.** {source}")
     
-    # Show example queries if no conversation has started
-    if len(st.session_state.messages) == 0:
-        st.markdown("### 💡 Example Questions")
-        st.markdown("Not sure where to start? Try one of these:")
-        
-        example_queries = [
-            "What industries does Samsara serve?",
-            "How has Samsara helped improve fleet safety?",
-            "What are some examples of ROI from Samsara customers?",
-            "Which companies use Samsara for cold chain monitoring?",
-            "How does Samsara help with driver retention?"
-        ]
-        
-        cols = st.columns(2)
-        for i, query in enumerate(example_queries):
-            with cols[i % 2]:
-                if st.button(query, key=f"example_{i}", use_container_width=True):
-                    st.session_state.example_query = query
-                    st.rerun()
-    
-    # Check if an example query was selected
-    prompt = None
-    if hasattr(st.session_state, 'example_query'):
-        prompt = st.session_state.example_query
-        del st.session_state.example_query
-    elif prompt := st.chat_input("Ask about Samsara customers...", key="chat_input"):
-        pass
-    
-    # Process the prompt (from example or chat input)
-    if prompt:
+    # Pinned input at the bottom
+    if prompt := st.chat_input("Ask about Samsara customers...", key="chat_input"):
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
