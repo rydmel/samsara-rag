@@ -1,11 +1,11 @@
-import asyncio
+import requests
 import os
 from typing import List, Dict, Any
 import json
 import re
-from crawl4ai import AsyncWebCrawler
 from bs4 import BeautifulSoup
 import streamlit as st
+import time
 
 class SamsaraCustomerScraper:
     """Scraper for Samsara customer stories"""
@@ -13,57 +13,61 @@ class SamsaraCustomerScraper:
     def __init__(self):
         self.base_url = "https://www.samsara.com/customers"
         self.customer_stories = []
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        })
     
     def scrape_customer_stories(self) -> List[Dict[str, Any]]:
         """Scrape customer stories from Samsara website"""
         try:
-            # Use asyncio to run the async scraping method
-            return asyncio.run(self._async_scrape())
+            return self._scrape_stories()
         except Exception as e:
             st.error(f"Error during scraping: {str(e)}")
             return []
     
-    async def _async_scrape(self) -> List[Dict[str, Any]]:
-        """Async method to scrape customer stories"""
+    def _scrape_stories(self) -> List[Dict[str, Any]]:
+        """Scrape customer stories using requests"""
         stories = []
         
-        async with AsyncWebCrawler(verbose=True) as crawler:
-            try:
-                # First, scrape the main customers page
-                result = await crawler.arun(url=self.base_url)
+        try:
+            # First, scrape the main customers page
+            st.info("Fetching main customers page...")
+            response = self.session.get(self.base_url, timeout=30)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'html.parser')
                 
-                if result.success:
-                    soup = BeautifulSoup(result.html, 'html.parser')
+                # Extract customer story links and basic info
+                customer_links = self._extract_customer_links(soup)
+                
+                st.info(f"Found {len(customer_links)} customer story links")
+                
+                # Process each customer story
+                for i, link_info in enumerate(customer_links[:20], 1):  # Limit to 20 stories
+                    st.text(f"Processing customer story {i}/{min(len(customer_links), 20)}")
                     
-                    # Extract customer story links and basic info
-                    customer_links = self._extract_customer_links(soup)
-                    
-                    st.info(f"Found {len(customer_links)} customer story links")
-                    
-                    # Process each customer story
-                    for i, link_info in enumerate(customer_links[:20], 1):  # Limit to 20 stories
-                        st.text(f"Processing customer story {i}/{min(len(customer_links), 20)}")
+                    try:
+                        time.sleep(0.5)  # Be polite to the server
+                        story_response = self.session.get(link_info['url'], timeout=30)
                         
-                        try:
-                            story_result = await crawler.arun(url=link_info['url'])
-                            
-                            if story_result.success:
-                                story_data = self._extract_story_content(
-                                    story_result.html, 
-                                    link_info
-                                )
-                                if story_data:
-                                    stories.append(story_data)
-                        
-                        except Exception as e:
-                            st.warning(f"Failed to scrape {link_info['url']}: {str(e)}")
-                            continue
-                
-                else:
-                    st.error("Failed to scrape main customers page")
-                
-            except Exception as e:
-                st.error(f"Scraping error: {str(e)}")
+                        if story_response.status_code == 200:
+                            story_data = self._extract_story_content(
+                                story_response.content, 
+                                link_info
+                            )
+                            if story_data:
+                                stories.append(story_data)
+                    
+                    except Exception as e:
+                        st.warning(f"Failed to scrape {link_info['url']}: {str(e)}")
+                        continue
+            
+            else:
+                st.error(f"Failed to scrape main customers page. Status code: {response.status_code}")
+            
+        except Exception as e:
+            st.error(f"Scraping error: {str(e)}")
         
         return stories
     
@@ -83,7 +87,7 @@ class SamsaraCustomerScraper:
             elements = soup.select(selector)
             for element in elements:
                 href = element.get('href')
-                if href and '/customers/' in href and href != '/customers':
+                if href and isinstance(href, str) and '/customers/' in href and href != '/customers':
                     # Convert relative URLs to absolute
                     if href.startswith('/'):
                         href = f"https://www.samsara.com{href}"
@@ -123,9 +127,9 @@ class SamsaraCustomerScraper:
         
         return unique_links
     
-    def _extract_story_content(self, html: str, link_info: Dict[str, str]) -> Dict[str, Any]:
+    def _extract_story_content(self, html_content: bytes, link_info: Dict[str, str]) -> Dict[str, Any]:
         """Extract content from individual customer story pages"""
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html_content, 'html.parser')
         
         # Remove script and style elements
         for script in soup(["script", "style", "nav", "footer", "header"]):
@@ -148,7 +152,7 @@ class SamsaraCustomerScraper:
         if len(story_data['content']) > 200:
             return story_data
         
-        return None
+        return story_data
     
     def _extract_company_name(self, soup: BeautifulSoup, title: str) -> str:
         """Extract company name from the page"""
