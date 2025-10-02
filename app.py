@@ -196,10 +196,9 @@ def chat_interface():
                 start_time = time.time()
                 
                 try:
-                    # Show thinking indicator
-                    message_placeholder.markdown("🤔 Thinking...")
-                    
-                    response = st.session_state.rag_engine.query(prompt, config)
+                    # Show spinner while processing
+                    with st.spinner(""):
+                        response = st.session_state.rag_engine.query(prompt, config)
                     end_time = time.time()
                     
                     # Display the complete response
