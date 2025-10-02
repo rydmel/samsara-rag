@@ -89,23 +89,71 @@ def main():
         evaluation_interface()
 
 def chat_interface():
-    """Main chat interface"""
+    """Main chat interface with elegant multi-turn conversation"""
     
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if message["role"] == "assistant" and "metadata" in message:
-                with st.expander("View Sources"):
-                    for i, source in enumerate(message["metadata"].get("sources", []), 1):
-                        st.markdown(f"**Source {i}:** {source}")
+    # Sidebar for conversation controls and settings
+    with st.sidebar:
+        st.subheader("💬 Conversation")
+        
+        # Show sources toggle
+        show_sources = st.checkbox("Show sources", value=False, help="Display source documents for each response")
+        
+        # Show performance metrics toggle
+        show_metrics = st.checkbox("Show metrics", value=False, help="Display performance metrics for each response")
+        
+        st.divider()
+        
+        # Quick actions
+        if st.button("🗑️ Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.rerun()
+        
+        # Show message count
+        st.caption(f"💬 {len(st.session_state.messages)} messages in conversation")
     
-    # Chat input
-    if prompt := st.chat_input("Ask about Samsara customers..."):
-        # Add user message
+    # Main chat container
+    chat_container = st.container()
+    
+    with chat_container:
+        # Display chat history
+        for i, message in enumerate(st.session_state.messages):
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                
+                # Show metadata if available and enabled
+                if message["role"] == "assistant" and "metadata" in message:
+                    metadata = message["metadata"]
+                    
+                    # Create a compact metadata section
+                    if show_sources or show_metrics:
+                        cols = []
+                        if show_metrics and "performance" in metadata:
+                            cols.append(1)
+                        if show_sources and metadata.get("sources"):
+                            cols.append(1)
+                        
+                        if cols:
+                            col_objs = st.columns(len(cols))
+                            col_idx = 0
+                            
+                            # Performance metrics
+                            if show_metrics and "performance" in metadata:
+                                with col_objs[col_idx]:
+                                    perf = metadata["performance"]
+                                    st.caption(f"⏱️ {perf['response_time']:.2f}s | 🔤 {perf.get('tokens_used', 'N/A')} tokens | 📚 {perf['sources_count']} sources")
+                                col_idx += 1
+                            
+                            # Sources in compact expander
+                            if show_sources and metadata.get("sources"):
+                                with col_objs[col_idx]:
+                                    with st.expander(f"📚 {len(metadata['sources'])} sources", expanded=False):
+                                        for j, source in enumerate(metadata["sources"], 1):
+                                            st.caption(f"**{j}.** {source}")
+    
+    # Pinned input at the bottom
+    if prompt := st.chat_input("Ask about Samsara customers...", key="chat_input"):
+        # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
         
         # Get RAG configuration from session state
         config = st.session_state.get('rag_config', {
@@ -118,17 +166,26 @@ def chat_interface():
             'max_tokens': 2048
         })
         
-        # Generate response
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
+        # Display user message immediately
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            # Generate and stream response
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                
                 start_time = time.time()
                 
                 try:
+                    # Show thinking indicator
+                    message_placeholder.markdown("🤔 Thinking...")
+                    
                     response = st.session_state.rag_engine.query(prompt, config)
                     end_time = time.time()
                     
-                    # Display response
-                    st.markdown(response["answer"])
+                    # Display the complete response
+                    message_placeholder.markdown(response["answer"])
                     
                     # Store performance data
                     performance_data = {
@@ -141,7 +198,7 @@ def chat_interface():
                     }
                     st.session_state.performance_data.append(performance_data)
                     
-                    # Add assistant message
+                    # Add assistant message to history
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": response["answer"],
@@ -151,19 +208,39 @@ def chat_interface():
                         }
                     })
                     
-                    # Show sources
-                    if response.get("sources"):
-                        with st.expander("View Sources"):
-                            for i, source in enumerate(response["sources"], 1):
-                                st.markdown(f"**Source {i}:** {source}")
+                    # Show inline metadata if enabled
+                    if show_sources or show_metrics:
+                        cols = []
+                        if show_metrics:
+                            cols.append(1)
+                        if show_sources and response.get("sources"):
+                            cols.append(1)
+                        
+                        if cols:
+                            col_objs = st.columns(len(cols))
+                            col_idx = 0
+                            
+                            if show_metrics:
+                                with col_objs[col_idx]:
+                                    st.caption(f"⏱️ {performance_data['response_time']:.2f}s | 🔤 {performance_data.get('tokens_used', 'N/A')} tokens | 📚 {performance_data['sources_count']} sources")
+                                col_idx += 1
+                            
+                            if show_sources and response.get("sources"):
+                                with col_objs[col_idx]:
+                                    with st.expander(f"📚 {len(response['sources'])} sources", expanded=False):
+                                        for j, source in enumerate(response["sources"], 1):
+                                            st.caption(f"**{j}.** {source}")
                 
                 except Exception as e:
-                    error_msg = f"Error generating response: {str(e)}"
-                    st.error(error_msg)
+                    error_msg = f"❌ Error: {str(e)}"
+                    message_placeholder.markdown(error_msg)
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": error_msg
                     })
+        
+        # Rerun to update the conversation
+        st.rerun()
 
 def configuration_interface():
     """RAG configuration interface"""
@@ -275,6 +352,70 @@ def configuration_interface():
             st.session_state.messages = []
             st.success("Chat history cleared!")
             st.rerun()
+    
+    # Database Management Section
+    st.divider()
+    st.subheader("📚 Vector Database Management")
+    
+    # Show database stats
+    stats = st.session_state.vector_store.get_stats()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Chunks", stats.get('total_chunks', 0))
+    with col2:
+        st.metric("Companies", stats.get('total_companies', 0))
+    with col3:
+        st.metric("Full Documents", stats.get('full_documents', 0))
+    with col4:
+        industries_count = len(stats.get('industries', []))
+        st.metric("Industries", industries_count)
+    
+    if stats.get('industries'):
+        st.info(f"**Industries:** {', '.join(stats['industries'])}")
+    
+    # Database actions
+    st.subheader("Database Actions")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Refresh Database", help="Clear and re-scrape all customer stories"):
+            with st.spinner("Refreshing database..."):
+                from scraper import SamsaraCustomerScraper
+                scraper = SamsaraCustomerScraper()
+                customer_stories = scraper.scrape_customer_stories()
+                
+                if customer_stories:
+                    st.session_state.vector_store.refresh_store(customer_stories)
+                    st.success("Database refreshed successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to scrape customer stories")
+    
+    with col2:
+        if st.button("➕ Update Database", help="Add new stories without removing existing ones"):
+            with st.spinner("Updating database..."):
+                from scraper import SamsaraCustomerScraper
+                scraper = SamsaraCustomerScraper()
+                customer_stories = scraper.scrape_customer_stories()
+                
+                if customer_stories:
+                    st.session_state.vector_store.add_or_update_stories(customer_stories)
+                    st.success("Database updated successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to scrape customer stories")
+    
+    # Warning for clear action
+    with st.expander("⚠️ Danger Zone"):
+        st.warning("**Clear Database**: This action will permanently delete all stored customer stories and embeddings.")
+        if st.button("🗑️ Clear All Data", type="primary"):
+            if st.session_state.vector_store.clear_store():
+                st.success("Database cleared successfully!")
+                st.rerun()
+            else:
+                st.error("Failed to clear database")
 
 def evaluation_interface():
     """Performance evaluation and monitoring interface"""

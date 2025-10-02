@@ -339,3 +339,100 @@ class VectorStore:
                 'full_documents': 0,
                 'error': str(e)
             }
+    
+    def clear_store(self):
+        """Clear all data from the vector store"""
+        try:
+            # Delete the collection
+            self.client.delete_collection(name=self.collection_name)
+            
+            # Recreate the collection
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
+            
+            # Clear full documents
+            self.full_documents = {}
+            self._save_full_documents()
+            
+            return True
+        except Exception as e:
+            st.error(f"Error clearing vector store: {str(e)}")
+            return False
+    
+    def refresh_store(self, customer_stories: List[Dict[str, Any]]):
+        """Clear and repopulate the vector store with new data"""
+        # Clear existing data
+        if self.clear_store():
+            # Repopulate with new data
+            self.populate_store(customer_stories)
+            return True
+        return False
+    
+    def add_or_update_stories(self, customer_stories: List[Dict[str, Any]]):
+        """Add new stories or update existing ones"""
+        st.info("Adding/updating customer stories...")
+        progress_bar = st.progress(0)
+        
+        updated_count = 0
+        added_count = 0
+        
+        for i, story in enumerate(customer_stories):
+            try:
+                doc_id_prefix = self._generate_doc_id(story['url'])
+                
+                # Check if this story already exists
+                existing = False
+                try:
+                    # Check if we have this URL in full_documents
+                    if story['url'] in self.full_documents:
+                        existing = True
+                except:
+                    pass
+                
+                # Create documents from the story
+                documents = self._create_documents_from_story(story)
+                
+                if existing:
+                    # Delete old documents for this story
+                    self._delete_story_documents(story['url'])
+                    updated_count += 1
+                else:
+                    added_count += 1
+                
+                # Add new documents
+                self._add_documents_to_collection(documents)
+                
+                # Store full document
+                self.full_documents[story['url']] = story
+                
+                progress_bar.progress((i + 1) / len(customer_stories))
+                
+            except Exception as e:
+                st.warning(f"Error processing story {story.get('title', 'Unknown')}: {str(e)}")
+        
+        # Save full documents
+        self._save_full_documents()
+        
+        st.success(f"Added {added_count} new stories, updated {updated_count} existing stories!")
+        return True
+    
+    def _delete_story_documents(self, url: str):
+        """Delete all documents associated with a story URL"""
+        try:
+            # Get all documents
+            all_docs = self.collection.get()
+            
+            # Find IDs to delete
+            ids_to_delete = []
+            if all_docs['metadatas']:
+                for i, metadata in enumerate(all_docs['metadatas']):
+                    if metadata.get('source') == url:
+                        ids_to_delete.append(all_docs['ids'][i])
+            
+            # Delete the documents
+            if ids_to_delete:
+                self.collection.delete(ids=ids_to_delete)
+        except Exception as e:
+            st.warning(f"Error deleting old documents for {url}: {str(e)}")
