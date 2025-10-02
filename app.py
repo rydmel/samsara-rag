@@ -69,7 +69,13 @@ def initialize_app():
     return True
 
 def main():
-    st.title("🚚 Samsara Customer Assistant")
+    # Display logo and title
+    col1, col2 = st.columns([1, 12])
+    with col1:
+        st.image("attached_assets/image_1759439317085.png", width=80)
+    with col2:
+        st.title("Samsara Customer Assistant")
+    
     st.markdown("Ask questions about Samsara's customer success stories and experiences.")
     
     # Initialize the application
