@@ -77,7 +77,7 @@ def main():
         st.stop()
     
     # Create tabs
-    tab1, tab2, tab3 = st.tabs(["💬 Chat", "⚙️ Configuration", "📊 Evaluation"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "⚙️ Configuration", "📊 Evaluation", "📚 Knowledge Base"])
     
     with tab1:
         chat_interface()
@@ -87,6 +87,9 @@ def main():
     
     with tab3:
         evaluation_interface()
+    
+    with tab4:
+        knowledge_base_interface()
 
 def chat_interface():
     """Main chat interface with elegant multi-turn conversation"""
@@ -557,6 +560,116 @@ def evaluation_interface():
             )
         else:
             st.button("💬 Download Chat Logs", disabled=True, help="No chat messages to export")
+
+def knowledge_base_interface():
+    """Display indexed customer stories database"""
+    st.header("📚 Knowledge Base - Indexed Customer Stories")
+    
+    # Get statistics
+    stats = st.session_state.vector_store.get_stats()
+    
+    # Display summary metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Documents", stats.get('full_documents', 0))
+    with col2:
+        st.metric("Total Chunks", stats.get('total_chunks', 0))
+    with col3:
+        st.metric("Industries", len(stats.get('industries', [])))
+    
+    if stats.get('industries'):
+        st.info(f"**Industries:** {', '.join(sorted(stats['industries']))}")
+    
+    st.divider()
+    
+    # Get all full documents
+    full_docs = st.session_state.vector_store.full_documents
+    
+    if not full_docs:
+        st.warning("⚠️ No customer stories in the knowledge base. Go to Configuration tab to load data.")
+        return
+    
+    # Filter and search
+    st.subheader("📋 Customer Stories Database")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        search_query = st.text_input("🔍 Search by company name or industry", "")
+    with col2:
+        industry_filter = st.selectbox(
+            "Filter by Industry",
+            ["All"] + sorted(stats.get('industries', []))
+        )
+    
+    # Convert to list for display
+    stories_list = []
+    for url, story in full_docs.items():
+        stories_list.append({
+            'Company': story.get('company_name', 'Unknown'),
+            'Industry': story.get('industry', 'Unknown'),
+            'Title': story.get('title', 'Untitled'),
+            'URL': url,
+            'Highlights': len(story.get('highlights', [])),
+            'ROI Metrics': len(story.get('roi_metrics', [])),
+            'Content Length': len(story.get('content', ''))
+        })
+    
+    # Filter stories
+    filtered_stories = stories_list
+    if search_query:
+        filtered_stories = [
+            s for s in stories_list 
+            if search_query.lower() in s['Company'].lower() 
+            or search_query.lower() in s['Industry'].lower()
+        ]
+    
+    if industry_filter != "All":
+        filtered_stories = [s for s in filtered_stories if s['Industry'] == industry_filter]
+    
+    st.caption(f"Showing {len(filtered_stories)} of {len(stories_list)} customer stories")
+    
+    # Display as expandable cards
+    for i, story in enumerate(filtered_stories, 1):
+        with st.expander(f"**{i}. {story['Company']}** - {story['Industry']}", expanded=False):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown(f"**Title:** {story['Title']}")
+                st.markdown(f"**Industry:** {story['Industry']}")
+                st.markdown(f"**URL:** [{story['URL']}]({story['URL']})")
+            
+            with col2:
+                st.metric("Highlights", story['Highlights'])
+                st.metric("ROI Metrics", story['ROI Metrics'])
+                st.metric("Content Size", f"{story['Content Length']:,} chars")
+    
+    # Export database
+    st.divider()
+    st.subheader("Export Knowledge Base")
+    
+    # Prepare export data
+    df = pd.DataFrame(stories_list)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="📊 Download as CSV",
+            data=csv,
+            file_name=f"knowledge_base_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            help="Export customer stories database as CSV"
+        )
+    
+    with col2:
+        json_data = json.dumps(stories_list, indent=2)
+        st.download_button(
+            label="📄 Download as JSON",
+            data=json_data,
+            file_name=f"knowledge_base_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            help="Export customer stories database as JSON"
+        )
 
 if __name__ == "__main__":
     main()
