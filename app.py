@@ -113,7 +113,9 @@ def chat_interface():
             'chunk_size': 1000,
             'chunk_overlap': 200,
             'top_k': 5,
-            'retrieval_method': 'semantic'
+            'retrieval_method': 'semantic',
+            'temperature': 0.7,
+            'max_tokens': 2048
         })
         
         # Generate response
@@ -215,6 +217,15 @@ def configuration_interface():
         )
         
         st.subheader("Model Parameters")
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=2.0,
+            value=0.7,
+            step=0.1,
+            help="Controls randomness in responses (0=focused, 2=creative)"
+        )
+        
         max_tokens = st.slider(
             "Max Completion Tokens",
             min_value=100,
@@ -230,6 +241,7 @@ def configuration_interface():
         'chunk_overlap': chunk_overlap,
         'top_k': top_k,
         'retrieval_method': retrieval_method,
+        'temperature': temperature,
         'max_tokens': max_tokens
     }
     

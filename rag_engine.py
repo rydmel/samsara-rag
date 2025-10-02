@@ -20,6 +20,7 @@ class RAGConfig:
     chunk_overlap: int = 200
     top_k: int = 5
     retrieval_method: str = "semantic"
+    temperature: float = 0.7
     max_tokens: int = 2048
 
 class RAGEngine:
@@ -52,6 +53,7 @@ class RAGEngine:
             chunk_overlap=config.get('chunk_overlap', 200),
             top_k=config.get('top_k', 5),
             retrieval_method=config.get('retrieval_method', 'semantic'),
+            temperature=config.get('temperature', 0.7),
             max_tokens=config.get('max_tokens', 2048)
         )
         
@@ -195,6 +197,7 @@ class RAGEngine:
                         "content": prompt
                     }
                 ],
+                temperature=config.temperature,
                 max_completion_tokens=config.max_tokens,
                 stream=False
             )
