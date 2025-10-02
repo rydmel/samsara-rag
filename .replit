@@ -4,7 +4,7 @@ integrations = ["python_openai:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["bash", "gitFull", "glibcLocales", "libjpeg_turbo", "libpng", "playwright-driver", "which", "xcodebuild", "zlib"]
+packages = ["bash", "glibcLocales", "xcodebuild", "zlib"]
 
 [deployment]
 deploymentTarget = "autoscale"
