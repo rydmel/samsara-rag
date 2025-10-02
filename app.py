@@ -172,7 +172,10 @@ def chat_interface():
             'top_k': 5,
             'retrieval_method': 'semantic',
             'temperature': 1.0,
-            'max_tokens': 2048
+            'max_tokens': 2048,
+            'max_agent_steps': 3,
+            'agent_confidence_threshold': 0.7,
+            'enable_reflection': True
         })
         
         # Display user message immediately
@@ -261,10 +264,38 @@ def configuration_interface():
         st.subheader("Retrieval Strategy")
         strategy = st.selectbox(
             "Select RAG Pattern",
-            options=["naive", "parent_document", "hybrid"],
+            options=["naive", "parent_document", "hybrid", "agentic"],
             index=0,
             help="Choose the RAG strategy to use for document retrieval"
         )
+        
+        # Agentic RAG specific parameters
+        if strategy == "agentic":
+            st.info("🤖 Agentic RAG uses multi-step reasoning for complex queries")
+            max_agent_steps = st.slider(
+                "Max Reasoning Steps",
+                min_value=1,
+                max_value=5,
+                value=3,
+                help="Maximum number of reasoning iterations the agent can perform"
+            )
+            agent_confidence_threshold = st.slider(
+                "Confidence Threshold",
+                min_value=0.5,
+                max_value=1.0,
+                value=0.7,
+                step=0.05,
+                help="Stop early if agent confidence exceeds this threshold"
+            )
+            enable_reflection = st.checkbox(
+                "Enable Reflection",
+                value=True,
+                help="Allow agent to reflect and synthesize findings"
+            )
+        else:
+            max_agent_steps = 3
+            agent_confidence_threshold = 0.7
+            enable_reflection = True
         
         st.subheader("Chunking Parameters")
         chunk_size = st.slider(
@@ -328,7 +359,10 @@ def configuration_interface():
         'top_k': top_k,
         'retrieval_method': retrieval_method,
         'temperature': temperature,
-        'max_tokens': max_tokens
+        'max_tokens': max_tokens,
+        'max_agent_steps': max_agent_steps,
+        'agent_confidence_threshold': agent_confidence_threshold,
+        'enable_reflection': enable_reflection
     }
     
     st.session_state.rag_config = config

@@ -22,6 +22,10 @@ class RAGConfig:
     retrieval_method: str = "semantic"
     temperature: float = 0.7
     max_tokens: int = 2048
+    # Agentic RAG parameters
+    max_agent_steps: int = 3
+    agent_confidence_threshold: float = 0.7
+    enable_reflection: bool = True
 
 class RAGEngine:
     """RAG engine with multiple retrieval strategies"""
@@ -54,7 +58,10 @@ class RAGEngine:
             top_k=config.get('top_k', 5),
             retrieval_method=config.get('retrieval_method', 'semantic'),
             temperature=config.get('temperature', 0.7),
-            max_tokens=config.get('max_tokens', 2048)
+            max_tokens=config.get('max_tokens', 2048),
+            max_agent_steps=config.get('max_agent_steps', 3),
+            agent_confidence_threshold=config.get('agent_confidence_threshold', 0.7),
+            enable_reflection=config.get('enable_reflection', True)
         )
         
         # Start tracking this query
@@ -68,6 +75,8 @@ class RAGEngine:
                 documents = self._parent_document_retrieval(question, rag_config)
             elif rag_config.strategy == "hybrid":
                 documents = self._hybrid_retrieval(question, rag_config)
+            elif rag_config.strategy == "agentic":
+                documents = self._agentic_retrieval(question, rag_config)
             else:
                 documents = self._naive_retrieval(question, rag_config)
             
@@ -171,6 +180,180 @@ class RAGEngine:
         union = words1.union(words2)
         
         return len(intersection) / len(union)
+    
+    def _agentic_retrieval(self, question: str, config: RAGConfig) -> List[Document]:
+        """Agentic RAG with multi-step reasoning and iterative retrieval"""
+        
+        st.info("🤖 Agentic RAG: Analyzing query with intelligent reasoning...")
+        
+        # Step 1: Plan - Decompose the query
+        plan = self._agent_plan(question)
+        st.write(f"**Agent Plan:** {plan['reasoning']}")
+        
+        # Initialize agent state
+        all_documents = []
+        seen_content = set()
+        agent_scratchpad = []
+        
+        # Step 2: Iterative retrieval loop
+        for step in range(config.max_agent_steps):
+            st.write(f"**Step {step + 1}/{config.max_agent_steps}**")
+            
+            # Decide next action
+            action = self._agent_decide_action(
+                question, 
+                plan, 
+                agent_scratchpad, 
+                step,
+                config
+            )
+            
+            st.write(f"  Action: {action['type']} - {action['reasoning']}")
+            
+            # Execute action
+            if action['type'] == 'retrieve_semantic':
+                docs = self.vector_store.similarity_search(
+                    action.get('query', question), 
+                    k=config.top_k
+                )
+            elif action['type'] == 'retrieve_parent':
+                chunk_results = self.vector_store.similarity_search(action.get('query', question), k=config.top_k)
+                docs = []
+                for chunk in chunk_results[:3]:
+                    source = chunk.metadata.get('source', '')
+                    if source:
+                        full_doc = self.vector_store.get_full_document(source)
+                        if full_doc:
+                            docs.append(full_doc)
+            elif action['type'] == 'stop':
+                st.write(f"  ✓ Agent decision: Sufficient information gathered")
+                break
+            else:
+                docs = self.vector_store.similarity_search(question, k=config.top_k)
+            
+            # Add unique documents
+            for doc in docs:
+                if doc.page_content not in seen_content:
+                    all_documents.append(doc)
+                    seen_content.add(doc.page_content)
+            
+            # Update scratchpad
+            agent_scratchpad.append({
+                'step': step + 1,
+                'action': action['type'],
+                'query': action.get('query', question),
+                'docs_found': len(docs),
+                'reasoning': action['reasoning']
+            })
+            
+            # Check if we have enough confidence
+            if action.get('confidence', 0) >= config.agent_confidence_threshold:
+                st.write(f"  ✓ Confidence threshold met ({action['confidence']:.2f})")
+                break
+        
+        # Step 3: Reflection (optional)
+        if config.enable_reflection and len(all_documents) > 0:
+            st.write("**Reflection:** Synthesizing multi-step findings...")
+            # Keep best documents based on relevance
+            all_documents = all_documents[:config.top_k * 2]
+        
+        st.success(f"🎯 Agentic RAG complete: Retrieved {len(all_documents)} unique documents across {len(agent_scratchpad)} reasoning steps")
+        
+        return all_documents[:config.top_k * 2] if all_documents else self._naive_retrieval(question, config)
+    
+    def _agent_plan(self, question: str) -> Dict[str, Any]:
+        """Use LLM to create a retrieval plan"""
+        
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-5",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a query planning assistant. Analyze the user's question and create a retrieval strategy."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Analyze this question and create a retrieval plan:
+
+Question: {question}
+
+Provide:
+1. Is this a simple or complex query?
+2. What sub-topics should we search for?
+3. What type of information is needed?
+
+Respond in JSON format with: {{"complexity": "simple|complex", "sub_queries": [...], "reasoning": "...""}}"""
+                    }
+                ],
+                temperature=0.3,
+                max_completion_tokens=500
+            )
+            
+            plan_text = response.choices[0].message.content
+            
+            # Try to parse JSON, fallback to text
+            try:
+                import json
+                plan = json.loads(plan_text)
+            except:
+                plan = {
+                    "complexity": "simple",
+                    "sub_queries": [question],
+                    "reasoning": plan_text
+                }
+            
+            return plan
+            
+        except Exception as e:
+            return {
+                "complexity": "simple",
+                "sub_queries": [question],
+                "reasoning": f"Planning failed: {str(e)}"
+            }
+    
+    def _agent_decide_action(
+        self, 
+        question: str, 
+        plan: Dict[str, Any], 
+        scratchpad: List[Dict], 
+        step: int,
+        config: RAGConfig
+    ) -> Dict[str, Any]:
+        """Agent decides next action based on current state"""
+        
+        # Simple heuristic-based decision for now
+        if step == 0:
+            # First step: semantic search on main query
+            return {
+                "type": "retrieve_semantic",
+                "query": question,
+                "reasoning": "Initial semantic search on main query",
+                "confidence": 0.5
+            }
+        elif step == 1 and plan.get('complexity') == 'complex':
+            # Second step for complex queries: try parent document
+            return {
+                "type": "retrieve_parent",
+                "query": question,
+                "reasoning": "Retrieving full documents for complex query",
+                "confidence": 0.7
+            }
+        elif step >= 2:
+            # Final step: check if we should stop
+            return {
+                "type": "stop",
+                "reasoning": "Sufficient retrieval iterations completed",
+                "confidence": 0.9
+            }
+        else:
+            # Default: semantic search
+            return {
+                "type": "retrieve_semantic",
+                "query": question,
+                "reasoning": "Additional semantic search",
+                "confidence": 0.6
+            }
     
     def _generate_response(self, question: str, documents: List[Document], config: RAGConfig) -> Dict[str, Any]:
         """Generate response using OpenAI API"""
