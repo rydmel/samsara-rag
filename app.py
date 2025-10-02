@@ -251,11 +251,30 @@ def configuration_interface():
     st.subheader("Current Configuration")
     st.json(config)
     
-    # Reset chat button
-    if st.button("Reset Chat History"):
-        st.session_state.messages = []
-        st.success("Chat history cleared!")
-        st.rerun()
+    # Actions
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Export configuration
+        config_export = {
+            'timestamp': datetime.now().isoformat(),
+            'config': config
+        }
+        config_json = json.dumps(config_export, indent=2)
+        st.download_button(
+            label="⬇️ Export Configuration",
+            data=config_json,
+            file_name=f"rag_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            help="Download current RAG configuration as JSON"
+        )
+    
+    with col2:
+        # Reset chat button
+        if st.button("🗑️ Reset Chat History"):
+            st.session_state.messages = []
+            st.success("Chat history cleared!")
+            st.rerun()
 
 def evaluation_interface():
     """Performance evaluation and monitoring interface"""
@@ -347,14 +366,50 @@ def evaluation_interface():
     
     # Export data
     st.subheader("Export Performance Data")
-    if st.button("Download Performance Data as CSV"):
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # CSV export
         csv = df.to_csv(index=False)
         st.download_button(
-            label="Download CSV",
+            label="📊 Download CSV",
             data=csv,
             file_name=f"rag_performance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
+            mime="text/csv",
+            help="Export performance metrics as CSV"
         )
+    
+    with col2:
+        # JSON export
+        json_data = json.dumps(st.session_state.performance_data, default=str, indent=2)
+        st.download_button(
+            label="📄 Download JSON",
+            data=json_data,
+            file_name=f"rag_performance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            help="Export performance metrics as JSON"
+        )
+    
+    with col3:
+        # Chat logs export
+        if st.session_state.messages:
+            chat_export = {
+                'timestamp': datetime.now().isoformat(),
+                'total_messages': len(st.session_state.messages),
+                'conversation': st.session_state.messages
+            }
+            # Use default=str to handle datetime serialization
+            chat_json = json.dumps(chat_export, default=str, indent=2)
+            st.download_button(
+                label="💬 Download Chat Logs",
+                data=chat_json,
+                file_name=f"chat_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                help="Export conversation history as JSON"
+            )
+        else:
+            st.button("💬 Download Chat Logs", disabled=True, help="No chat messages to export")
 
 if __name__ == "__main__":
     main()
