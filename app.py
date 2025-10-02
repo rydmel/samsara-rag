@@ -577,9 +577,6 @@ def knowledge_base_interface():
     with col3:
         st.metric("Industries", len(stats.get('industries', [])))
     
-    if stats.get('industries'):
-        st.info(f"**Industries:** {', '.join(sorted(stats['industries']))}")
-    
     st.divider()
     
     # Get all full documents
@@ -589,66 +586,47 @@ def knowledge_base_interface():
         st.warning("⚠️ No customer stories in the knowledge base. Go to Configuration tab to load data.")
         return
     
-    # Filter and search
-    st.subheader("📋 Customer Stories Database")
-    
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        search_query = st.text_input("🔍 Search by company name or industry", "")
-    with col2:
-        industry_filter = st.selectbox(
-            "Filter by Industry",
-            ["All"] + sorted(stats.get('industries', []))
-        )
-    
-    # Convert to list for display
-    stories_list = []
+    # Convert to table format
+    table_data = []
     for url, story in full_docs.items():
-        stories_list.append({
-            'Company': story.get('company_name', 'Unknown'),
-            'Industry': story.get('industry', 'Unknown'),
-            'Title': story.get('title', 'Untitled'),
-            'URL': url,
-            'Highlights': len(story.get('highlights', [])),
-            'ROI Metrics': len(story.get('roi_metrics', [])),
-            'Content Length': len(story.get('content', ''))
+        # Extract path segment (last part of URL)
+        path_segment = url.rstrip('/').split('/')[-1] if url else 'unknown'
+        
+        table_data.append({
+            'Path Segment': path_segment,
+            'Full URL': url,
+            'Content Size': len(story.get('content', ''))
         })
     
-    # Filter stories
-    filtered_stories = stories_list
-    if search_query:
-        filtered_stories = [
-            s for s in stories_list 
-            if search_query.lower() in s['Company'].lower() 
-            or search_query.lower() in s['Industry'].lower()
-        ]
+    # Create DataFrame and sort by path segment
+    df = pd.DataFrame(table_data)
+    df = df.sort_values('Path Segment')
     
-    if industry_filter != "All":
-        filtered_stories = [s for s in filtered_stories if s['Industry'] == industry_filter]
-    
-    st.caption(f"Showing {len(filtered_stories)} of {len(stories_list)} customer stories")
-    
-    # Display as expandable cards
-    for i, story in enumerate(filtered_stories, 1):
-        with st.expander(f"**{i}. {story['Company']}** - {story['Industry']}", expanded=False):
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.markdown(f"**Title:** {story['Title']}")
-                st.markdown(f"**Industry:** {story['Industry']}")
-                st.markdown(f"**URL:** [{story['URL']}]({story['URL']})")
-            
-            with col2:
-                st.metric("Highlights", story['Highlights'])
-                st.metric("ROI Metrics", story['ROI Metrics'])
-                st.metric("Content Size", f"{story['Content Length']:,} chars")
+    # Display table
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=400,
+        column_config={
+            "Path Segment": st.column_config.TextColumn(
+                "Path Segment",
+                width="medium"
+            ),
+            "Full URL": st.column_config.LinkColumn(
+                "Full URL",
+                width="large"
+            ),
+            "Content Size": st.column_config.NumberColumn(
+                "Content Size",
+                format="%d chars",
+                width="small"
+            )
+        }
+    )
     
     # Export database
     st.divider()
     st.subheader("Export Knowledge Base")
-    
-    # Prepare export data
-    df = pd.DataFrame(stories_list)
     
     col1, col2 = st.columns(2)
     with col1:
@@ -662,7 +640,7 @@ def knowledge_base_interface():
         )
     
     with col2:
-        json_data = json.dumps(stories_list, indent=2)
+        json_data = df.to_json(orient='records', indent=2)
         st.download_button(
             label="📄 Download as JSON",
             data=json_data,
