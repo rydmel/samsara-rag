@@ -147,20 +147,55 @@ class SamsaraCustomerScraper:
         links = []
         
         try:
-            # Look for script tags that might contain JSON data
-            script_tags = soup.find_all('script', type='application/json')
+            # Look for ALL script tags that might contain JSON data
+            script_tags = soup.find_all('script')
             
             for script in script_tags:
                 try:
-                    data = json.loads(script.string)
-                    # Recursively search for customer URLs in the JSON
-                    customer_urls = self._find_customer_urls_in_json(data)
-                    for url in customer_urls:
-                        if url not in [link['url'] for link in links]:
-                            # Extract title from URL
-                            title = url.split('/')[-1].replace('-', ' ').title()
-                            links.append({'url': url, 'title': title})
-                except:
+                    script_content = str(script.string) if script.string else ''
+                    
+                    # Skip if too small to contain meaningful data
+                    if len(script_content) < 1000:
+                        continue
+                    
+                    # Try to parse as JSON
+                    if script_content.strip().startswith('[') or script_content.strip().startswith('{'):
+                        try:
+                            data = json.loads(script_content)
+                            customer_urls = self._find_customer_urls_in_json(data)
+                            for url in customer_urls:
+                                if url not in [link['url'] for link in links]:
+                                    title = url.split('/')[-1].replace('-', ' ').title()
+                                    links.append({'url': url, 'title': title})
+                        except:
+                            pass
+                    
+                    # Also search for URLs directly in the script content (for non-parseable JSON)
+                    if 'customers/' in script_content:
+                        # Find all customer story URLs using regex
+                        import re
+                        url_pattern = r'["\']?(https?://[^"\']+/customers/[^"\'\s}>,]+)["\']?'
+                        matches = re.findall(url_pattern, script_content)
+                        for url in matches:
+                            # Clean up the URL
+                            url = url.rstrip('",\'};]')
+                            if url and url != 'https://www.samsara.com/customers':
+                                if url not in [link['url'] for link in links]:
+                                    title = url.split('/')[-1].replace('-', ' ').title()
+                                    links.append({'url': url, 'title': title})
+                        
+                        # Also look for relative URLs
+                        rel_pattern = r'["\']?(/customers/[^"\'\s}>,]+)["\']?'
+                        matches = re.findall(rel_pattern, script_content)
+                        for path in matches:
+                            path = path.rstrip('",\'};]')
+                            if path and path != '/customers':
+                                url = f"https://www.samsara.com{path}"
+                                if url not in [link['url'] for link in links]:
+                                    title = path.split('/')[-1].replace('-', ' ').title()
+                                    links.append({'url': url, 'title': title})
+                        
+                except Exception as e:
                     continue
             
             # Also check for Next.js data
