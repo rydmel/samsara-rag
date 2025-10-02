@@ -295,30 +295,86 @@ class SamsaraCustomerScraper:
     
     def _extract_story_content(self, html_content: bytes, link_info: Dict[str, str]) -> Dict[str, Any]:
         """Extract content from individual customer story pages"""
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style", "nav", "footer", "header"]):
-            script.decompose()
-        
-        story_data = {
-            'url': link_info['url'],
-            'title': link_info['title'],
-            'company_name': self._extract_company_name(soup, link_info['title']),
-            'industry': self._extract_industry(soup),
-            'content': self._extract_main_content(soup),
-            'highlights': self._extract_highlights(soup),
-            'roi_metrics': self._extract_roi_metrics(soup),
-            'challenges': self._extract_challenges(soup),
-            'solutions': self._extract_solutions(soup),
-            'competitor_info': self._extract_competitor_info(soup)
-        }
-        
-        # Only return if we have substantial content
-        if len(story_data['content']) > 200:
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style", "nav", "footer", "header"]):
+                script.decompose()
+            
+            # Extract all data with error handling for each field
+            story_data = {
+                'url': link_info['url'],
+                'title': link_info.get('title', 'Unknown'),
+                'company_name': '',
+                'industry': '',
+                'content': '',
+                'highlights': [],
+                'roi_metrics': [],
+                'challenges': [],
+                'solutions': [],
+                'competitor_info': ''
+            }
+            
+            # Extract each field with try-except to prevent failures
+            try:
+                story_data['company_name'] = self._extract_company_name(soup, link_info.get('title', ''))
+            except:
+                pass
+            
+            try:
+                story_data['industry'] = self._extract_industry(soup)
+            except:
+                story_data['industry'] = 'Unknown'
+            
+            try:
+                story_data['content'] = self._extract_main_content(soup)
+            except:
+                # Fallback to getting all text
+                story_data['content'] = soup.get_text(strip=True)[:5000]
+            
+            try:
+                story_data['highlights'] = self._extract_highlights(soup)
+            except:
+                pass
+            
+            try:
+                story_data['roi_metrics'] = self._extract_roi_metrics(soup)
+            except:
+                pass
+            
+            try:
+                story_data['challenges'] = self._extract_challenges(soup)
+            except:
+                pass
+            
+            try:
+                story_data['solutions'] = self._extract_solutions(soup)
+            except:
+                pass
+            
+            try:
+                story_data['competitor_info'] = self._extract_competitor_info(soup)
+            except:
+                pass
+            
+            # Always return story data, even if content is minimal
             return story_data
-        
-        return story_data
+            
+        except Exception as e:
+            # If everything fails, return minimal data
+            return {
+                'url': link_info['url'],
+                'title': link_info.get('title', 'Unknown'),
+                'company_name': link_info.get('title', 'Unknown'),
+                'industry': 'Unknown',
+                'content': f"Failed to extract content: {str(e)}",
+                'highlights': [],
+                'roi_metrics': [],
+                'challenges': [],
+                'solutions': [],
+                'competitor_info': ''
+            }
     
     def _extract_company_name(self, soup: BeautifulSoup, title: str) -> str:
         """Extract company name from the page"""
