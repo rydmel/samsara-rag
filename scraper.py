@@ -43,9 +43,9 @@ class SamsaraCustomerScraper:
                 
                 st.info(f"Found {len(customer_links)} customer story links")
                 
-                # Process each customer story
-                for i, link_info in enumerate(customer_links[:20], 1):  # Limit to 20 stories
-                    st.text(f"Processing customer story {i}/{min(len(customer_links), 20)}")
+                # Process all customer stories
+                for i, link_info in enumerate(customer_links, 1):
+                    st.text(f"Processing customer story {i}/{len(customer_links)}")
                     
                     try:
                         time.sleep(0.5)  # Be polite to the server
