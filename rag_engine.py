@@ -286,7 +286,6 @@ Provide:
 Respond in JSON format with: {{"complexity": "simple|complex", "sub_queries": [...], "reasoning": "...""}}"""
                     }
                 ],
-                temperature=0.3,
                 max_completion_tokens=500
             )
             
