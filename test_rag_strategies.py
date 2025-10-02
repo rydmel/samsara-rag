@@ -1,13 +1,10 @@
-"""
-Test script to verify all RAG strategies work correctly
-"""
 import os
 from vector_store import VectorStore
 from rag_engine import RAGEngine
 from observability import ObservabilityTracker
 
 def test_rag_strategies():
-    """Test all three RAG strategies"""
+    """Test RAG strategies"""
     
     print("Initializing components...")
     obs_tracker = ObservabilityTracker()
