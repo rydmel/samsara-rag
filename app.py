@@ -188,7 +188,8 @@ def chat_interface():
             'max_tokens': 2048,
             'max_agent_steps': 3,
             'agent_confidence_threshold': 0.7,
-            'enable_reflection': True
+            'enable_reflection': True,
+            'use_adaptive_retrieval': True
         })
         
         # Display user message immediately
@@ -330,13 +331,24 @@ def configuration_interface():
     
     with col2:
         st.subheader("Retrieval Parameters")
+
+         # Adaptive retrieval toggle
+        use_adaptive_retrieval = st.checkbox(
+            "🎯 Adaptive Retrieval",
+            value=True,
+            help="Automatically adjust retrieval depth based on query type (list queries: up to 50 chunks, analytical: up to 15, factoid: base value)"
+        )
+
         top_k = st.slider(
-            "Top-K Retrieval",
+           "Base Top-K" if use_adaptive_retrieval else "Top-K Retrieval",
             min_value=1,
             max_value=20,
             value=5,
-            help="Number of top documents to retrieve"
+            help="Base number of documents to retrieve (scaled automatically if adaptive retrieval is enabled)"
         )
+
+        if use_adaptive_retrieval:
+            st.caption("📊 Adaptive scaling: List queries ×10 (max 50), Analytical ×3 (max 15), Factoid ×1")
         
         retrieval_method = st.selectbox(
             "Retrieval Method",
@@ -374,7 +386,8 @@ def configuration_interface():
         'max_tokens': max_tokens,
         'max_agent_steps': max_agent_steps,
         'agent_confidence_threshold': agent_confidence_threshold,
-        'enable_reflection': enable_reflection
+        'enable_reflection': enable_reflection,
+        'use_adaptive_retrieval': use_adaptive_retrieval
     }
     
     st.session_state.rag_config = config

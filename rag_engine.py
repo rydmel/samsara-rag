@@ -30,6 +30,9 @@ class RAGConfig:
     max_agent_steps: int = 3
     agent_confidence_threshold: float = 0.7
     enable_reflection: bool = True
+    # Adaptive retrieval
+    use_adaptive_retrieval: bool = True
+    query_intent: Optional[str] = None
 
 class RAGEngine:
     """RAG engine with multiple retrieval strategies"""
@@ -52,20 +55,99 @@ class RAGEngine:
             separators=["\n\n", "\n", ".", " ", ""]
         )
     
+    def _classify_query_intent(self, question: str) -> str:
+        """Classify query intent to determine optimal retrieval strategy
+        
+        Order matters: Check most specific patterns first to avoid misclassification
+        """
+        
+        question_lower = question.lower()
+        
+        # Factoid queries - need specific facts (check first for precision)
+        factoid_patterns = [
+            'what is the name', 'when did', 'who is', 'where is',
+            'what does', 'define', 'when was', 'which company is',
+            'which customer is'
+        ]
+        
+        for pattern in factoid_patterns:
+            if pattern in question_lower:
+                return "factoid"
+        
+        # Analytical queries - need detailed context (check before list to catch specific analytical queries)
+        # More specific patterns first to avoid false positives
+        analytical_patterns = [
+            'what are the benefits', 'what are the advantages', 'what are the main',
+            'what are the key', 'what are the primary', 'what are the common',
+            'what challenges', 'what problems', 'what issues',
+            'how did', 'why does', 'why did', 'why are', 'why is',
+            'explain how', 'what was the impact', 'what were the results',
+            'analyze', 'compare', 'comparison', 'how does', 'how has',
+            'benefits of', 'advantages of', 'impact of'
+        ]
+        
+        for pattern in analytical_patterns:
+            if pattern in question_lower:
+                return "analytical"
+        
+        # List/Aggregation queries - need comprehensive results
+        list_patterns = [
+            'which companies', 'list all', 'list the', 'what companies',
+            'how many companies', 'what industries', 'which industries',
+            'all customers', 'all the', 'companies that', 'customers who',
+            'examples of', 'show me all', 'give me all', 'name all'
+        ]
+        
+        for pattern in list_patterns:
+            if pattern in question_lower:
+                return "list_aggregation"
+        
+        # Default to analytical for safety
+        return "analytical"
+    
+    def _get_adaptive_top_k(self, question: str, base_top_k: int, use_adaptive: bool = True) -> int:
+        """Get adaptive top_k based on query intent"""
+        
+        if not use_adaptive:
+            return base_top_k
+        
+        intent = self._classify_query_intent(question)
+        
+        # Scale top_k based on intent
+        if intent == "list_aggregation":
+            # Need comprehensive results for lists
+            return min(base_top_k * 10, 50)  # 5 -> 50, 10 -> 50 (capped)
+        elif intent == "analytical":
+            # Need good context but not exhaustive
+            return min(base_top_k * 3, 15)  # 5 -> 15
+        else:  # factoid
+            # Precision over recall
+            return base_top_k
+        
     def query(self, question: str, config: Dict[str, Any]) -> Dict[str, Any]:
         """Process a query using the specified RAG configuration"""
+        
+        # Get base top_k from config
+        base_top_k = config.get('top_k', 5)
+        use_adaptive = config.get('use_adaptive_retrieval', True)
+        
+        # Determine adaptive top_k based on query intent
+        adaptive_top_k = self._get_adaptive_top_k(question, base_top_k, use_adaptive)
+        query_intent = self._classify_query_intent(question)
         
         rag_config = RAGConfig(
             strategy=config.get('strategy', 'naive'),
             chunk_size=config.get('chunk_size', 1000),
             chunk_overlap=config.get('chunk_overlap', 200),
-            top_k=config.get('top_k', 5),
+            top_k=adaptive_top_k,  # Use adaptive top_k
             retrieval_method=config.get('retrieval_method', 'semantic'),
             temperature=config.get('temperature', 0.7),
             max_tokens=config.get('max_tokens', 2048),
             max_agent_steps=config.get('max_agent_steps', 3),
             agent_confidence_threshold=config.get('agent_confidence_threshold', 0.7),
-            enable_reflection=config.get('enable_reflection', True)
+            enable_reflection=config.get('enable_reflection', True),
+            use_adaptive_retrieval=use_adaptive,
+            query_intent=query_intent
         )
         
         # Start tracking this query
