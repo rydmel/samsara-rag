@@ -5,6 +5,10 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
 import streamlit as st
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 try:
     import logfire
@@ -33,10 +37,10 @@ class ObservabilityTracker:
                     self.logfire_enabled = True
                     print("✓ Pydantic Logfire initialized (no token found)")
             except Exception as e:
-                print(f"⚠ Logfire configuration failed: {str(e)}")
+                print(f"WARNING: Logfire configuration failed: {str(e)}")
                 self.logfire_enabled = False
         else:
-            print("⚠ Pydantic Logfire not available - using local logging")
+            print("WARNING: Pydantic Logfire not available - using local logging")
             self.logfire_enabled = False
     
     def start_trace(self, query: str, config: Dict[str, Any]) -> str:
@@ -63,7 +67,7 @@ class ObservabilityTracker:
                     span.set_attribute('rag_strategy', config.get('strategy', 'unknown'))
                     span.set_attribute('top_k', config.get('top_k', 0))
             except Exception as e:
-                print(f"⚠ Logfire logging error: {str(e)}")
+                print(f"WARNING: Logfire logging error: {str(e)}")
         
         return trace_id
     

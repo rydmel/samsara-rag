@@ -6,6 +6,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from scraper import SamsaraCustomerScraper
 from rag_engine import RAGEngine
@@ -16,7 +20,7 @@ from evaluation import EvaluationMetrics
 # Page configuration
 st.set_page_config(
     page_title="Samsara Customer Assistant",
-    page_icon="🚚",
+    page_icon="📈",
     layout="wide"
 )
 
@@ -83,7 +87,7 @@ def main():
         st.stop()
     
     # Create tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat", "⚙️ Configuration", "📊 Evaluation", "📚 Knowledge Base"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Chat", "Configuration", "Evaluation", "Knowledge Base"])
     
     with tab1:
         chat_interface()
@@ -102,7 +106,7 @@ def chat_interface():
     
     # Sidebar for conversation controls and settings
     with st.sidebar:
-        st.subheader("💬 Conversation")
+        st.subheader("Conversation")
         
         # Show sources toggle
         show_sources = st.checkbox("Show sources", value=False, help="Display source documents for each response")
@@ -113,17 +117,17 @@ def chat_interface():
         st.divider()
         
         # Quick actions
-        if st.button("🗑️ Clear Chat", use_container_width=True):
+        if st.button("Clear Chat", width='stretch'):
             st.session_state.messages = []
             st.rerun()
         
         # Show message count
-        st.caption(f"💬 {len(st.session_state.messages)} messages in conversation")
+        st.caption(f"{len(st.session_state.messages)} messages in conversation")
     
     # Check if vector store has data
     stats = st.session_state.vector_store.get_stats()
     if stats.get('total_chunks', 0) == 0:
-        st.warning("⚠️ The knowledge base is empty. Please go to the Configuration tab and click 'Refresh Database' to load customer stories.")
+        st.warning("WARNING: The knowledge base is empty. Please go to the Configuration tab and click 'Refresh Database' to load customer stories.")
         return
     
     # Main chat container
@@ -155,13 +159,13 @@ def chat_interface():
                             if show_metrics and "performance" in metadata:
                                 with col_objs[col_idx]:
                                     perf = metadata["performance"]
-                                    st.caption(f"⏱️ {perf['response_time']:.2f}s | 🔤 {perf.get('tokens_used', 'N/A')} tokens | 📚 {perf['sources_count']} sources")
+                                    st.caption(f"Time: {perf['response_time']:.2f}s | Tokens: {perf.get('tokens_used', 'N/A')} | Sources: {perf['sources_count']}")
                                 col_idx += 1
                             
                             # Sources in compact expander
                             if show_sources and metadata.get("sources"):
                                 with col_objs[col_idx]:
-                                    with st.expander(f"📚 {len(metadata['sources'])} sources", expanded=False):
+                                    with st.expander(f"Sources ({len(metadata['sources'])})", expanded=False):
                                         for j, source in enumerate(metadata["sources"], 1):
                                             st.caption(f"**{j}.** {source}")
     
@@ -239,12 +243,12 @@ def chat_interface():
                             
                             if show_metrics:
                                 with col_objs[col_idx]:
-                                    st.caption(f"⏱️ {performance_data['response_time']:.2f}s | 🔤 {performance_data.get('tokens_used', 'N/A')} tokens | 📚 {performance_data['sources_count']} sources")
+                                    st.caption(f"Time: {performance_data['response_time']:.2f}s | Tokens: {performance_data.get('tokens_used', 'N/A')} | Sources: {performance_data['sources_count']}")
                                 col_idx += 1
                             
                             if show_sources and response.get("sources"):
                                 with col_objs[col_idx]:
-                                    with st.expander(f"📚 {len(response['sources'])} sources", expanded=False):
+                                    with st.expander(f"Sources ({len(response['sources'])})", expanded=False):
                                         for j, source in enumerate(response["sources"], 1):
                                             st.caption(f"**{j}.** {source}")
                 
@@ -387,7 +391,7 @@ def configuration_interface():
         }
         config_json = json.dumps(config_export, indent=2)
         st.download_button(
-            label="⬇️ Export Configuration",
+            label="Export Configuration",
             data=config_json,
             file_name=f"rag_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
@@ -396,14 +400,14 @@ def configuration_interface():
     
     with col2:
         # Reset chat button
-        if st.button("🗑️ Reset Chat History"):
+        if st.button("Reset Chat History"):
             st.session_state.messages = []
             st.success("Chat history cleared!")
             st.rerun()
     
     # Database Management Section
     st.divider()
-    st.subheader("📚 Vector Database Management")
+    st.subheader("Vector Database Management")
     
     # Show database stats
     stats = st.session_state.vector_store.get_stats()
@@ -456,9 +460,9 @@ def configuration_interface():
                     st.error("Failed to scrape customer stories")
     
     # Warning for clear action
-    with st.expander("⚠️ Danger Zone"):
+    with st.expander("DANGER ZONE"):
         st.warning("**Clear Database**: This action will permanently delete all stored customer stories and embeddings.")
-        if st.button("🗑️ Clear All Data", type="primary"):
+        if st.button("Clear All Data", type="primary"):
             if st.session_state.vector_store.clear_store():
                 st.success("Database cleared successfully!")
                 st.rerun()
@@ -504,7 +508,7 @@ def evaluation_interface():
         color='strategy',
         title="Response Time Over Time by Strategy"
     )
-    st.plotly_chart(fig_time, use_container_width=True)
+    st.plotly_chart(fig_time, width='stretch')
     
     # Strategy comparison
     st.subheader("Strategy Performance Comparison")
@@ -527,7 +531,7 @@ def evaluation_interface():
             title="Response Time Distribution",
             nbins=20
         )
-        st.plotly_chart(fig_dist, use_container_width=True)
+        st.plotly_chart(fig_dist, width='stretch')
     
     with col2:
         fig_box = px.box(
@@ -536,7 +540,7 @@ def evaluation_interface():
             y='response_time',
             title="Response Time by Strategy"
         )
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_box, width='stretch')
     
     # Query history
     st.subheader("Query History")
@@ -562,7 +566,7 @@ def evaluation_interface():
         # CSV export
         csv = df.to_csv(index=False)
         st.download_button(
-            label="📊 Download CSV",
+            label="Download CSV",
             data=csv,
             file_name=f"rag_performance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
@@ -591,18 +595,18 @@ def evaluation_interface():
             # Use default=str to handle datetime serialization
             chat_json = json.dumps(chat_export, default=str, indent=2)
             st.download_button(
-                label="💬 Download Chat Logs",
+                label="Download Chat Logs",
                 data=chat_json,
                 file_name=f"chat_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                 mime="application/json",
                 help="Export conversation history as JSON"
             )
         else:
-            st.button("💬 Download Chat Logs", disabled=True, help="No chat messages to export")
+            st.button("Download Chat Logs", disabled=True, help="No chat messages to export")
 
 def knowledge_base_interface():
     """Display indexed customer stories database"""
-    st.header("📚 Knowledge Base - Indexed Customer Stories")
+    st.header("Knowledge Base - Indexed Customer Stories")
     
     # Get statistics
     stats = st.session_state.vector_store.get_stats()
@@ -622,7 +626,7 @@ def knowledge_base_interface():
     full_docs = st.session_state.vector_store.full_documents
     
     if not full_docs:
-        st.warning("⚠️ No customer stories in the knowledge base. Go to Configuration tab to load data.")
+        st.warning("WARNING: No customer stories in the knowledge base. Go to Configuration tab to load data.")
         return
     
     # Convert to table format
@@ -644,7 +648,7 @@ def knowledge_base_interface():
     # Display table
     st.dataframe(
         df,
-        use_container_width=True,
+        width='stretch',
         height=400,
         column_config={
             "Path Segment": st.column_config.TextColumn(
@@ -671,7 +675,7 @@ def knowledge_base_interface():
     with col1:
         csv = df.to_csv(index=False)
         st.download_button(
-            label="📊 Download as CSV",
+            label="Download as CSV",
             data=csv,
             file_name=f"knowledge_base_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",

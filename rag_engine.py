@@ -3,6 +3,10 @@ import json
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from openai import OpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter

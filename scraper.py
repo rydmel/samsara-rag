@@ -43,12 +43,13 @@ class SamsaraCustomerScraper:
                 
                 st.info(f"Found {len(customer_links)} customer story links")
                 
-                # Process each customer story
-                for i, link_info in enumerate(customer_links[:20], 1):  # Limit to 20 stories
-                    st.text(f"Processing customer story {i}/{min(len(customer_links), 20)}")
+                # Process all customer stories
+                total_stories = len(customer_links)
+                for i, link_info in enumerate(customer_links, 1):
+                    st.text(f"Processing customer story {i}/{total_stories}")
                     
                     try:
-                        time.sleep(0.5)  # Be polite to the server
+                        time.sleep(0.2)  # Be polite to the server
                         story_response = self.session.get(link_info['url'], timeout=30)
                         
                         if story_response.status_code == 200:
@@ -72,60 +73,77 @@ class SamsaraCustomerScraper:
         return stories
     
     def _extract_customer_links(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extract customer story links from the main page"""
+        """Extract customer story links using Contentful API"""
         links = []
         
-        # Look for customer story links - these patterns may need adjustment based on actual HTML structure
-        customer_selectors = [
-            'a[href*="/customers/"]',
-            '.customer-story a',
-            '.case-study a',
-            '[data-testid*="customer"] a'
-        ]
+        # Contentful API credentials
+        SPACE_ID = "bx9krvy0u3sx"
+        ACCESS_TOKEN = "9247925a3764b651e63f560743ccc11a2f3d8d478143e2431409232986436f5f"
+        ENVIRONMENT = "master"
         
-        for selector in customer_selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                href = element.get('href')
-                if href and isinstance(href, str) and '/customers/' in href and href != '/customers':
-                    # Convert relative URLs to absolute
-                    if href.startswith('/'):
-                        href = f"https://www.samsara.com{href}"
+        # Query Contentful API for all case studies
+        api_url = f"https://cdn.contentful.com/spaces/{SPACE_ID}/environments/{ENVIRONMENT}/entries"
+        
+        headers = {
+            'Authorization': f'Bearer {ACCESS_TOKEN}',
+        }
+        
+        params = {
+            'content_type': 'blogPost',
+            'fields.type': 'Case Study',
+            'limit': 1000,
+            'locale': 'en-US'
+        }
+        
+        try:
+            response = self.session.get(api_url, headers=headers, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                for item in data.get('items', []):
+                    fields = item.get('fields', {})
+                    slug = fields.get('blogPageSlug')
+                    title = fields.get('title', '')
                     
-                    title = element.get_text(strip=True) or element.get('title', '')
-                    
-                    if href not in [link['url'] for link in links]:
+                    if slug:
+                        full_url = f"https://www.samsara.com/customers/{slug}"
+                        links.append({
+                            'url': full_url,
+                            'title': title
+                        })
+            else:
+                st.warning(f"Contentful API returned status {response.status_code}. Falling back to HTML scraping...")
+                # Fallback to original method if API fails
+                return self._extract_customer_links_fallback(soup)
+                
+        except Exception as e:
+            st.warning(f"Contentful API error: {str(e)}. Falling back to HTML scraping...")
+            return self._extract_customer_links_fallback(soup)
+        
+        return links
+    
+    def _extract_customer_links_fallback(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
+        """Fallback method to extract customer links from HTML"""
+        links = []
+        
+        # Look for customer story links
+        all_links = soup.find_all('a', href=True)
+        for link in all_links:
+            href = link['href']
+            if '/customers/' in href and href != '/customers':
+                if href.startswith('/'):
+                    href = f"https://www.samsara.com{href}"
+                
+                title = link.get_text(strip=True)
+                if title and len(title) > 5:
+                    if href not in [l['url'] for l in links]:
                         links.append({
                             'url': href,
                             'title': title
                         })
         
-        # If no specific customer links found, try to find them in the page content
-        if not links:
-            # Look for any links that might be customer stories
-            all_links = soup.find_all('a', href=True)
-            for link in all_links:
-                href = link['href']
-                if '/customers/' in href and href != '/customers':
-                    if href.startswith('/'):
-                        href = f"https://www.samsara.com{href}"
-                    
-                    title = link.get_text(strip=True)
-                    if title and len(title) > 5:  # Only meaningful titles
-                        links.append({
-                            'url': href,
-                            'title': title
-                        })
-        
-        # Remove duplicates
-        unique_links = []
-        seen_urls = set()
-        for link in links:
-            if link['url'] not in seen_urls:
-                unique_links.append(link)
-                seen_urls.add(link['url'])
-        
-        return unique_links
+        return links
     
     def _extract_story_content(self, html_content: bytes, link_info: Dict[str, str]) -> Dict[str, Any]:
         """Extract content from individual customer story pages"""
