@@ -9,7 +9,10 @@ import json
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+#load_dotenv()
+
+for key, value in st.secrets.items():
+    os.environ[key] = value
 
 from scraper import SamsaraCustomerScraper
 from rag_engine import RAGEngine
